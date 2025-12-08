@@ -50,20 +50,20 @@ class PipelineConfig(BaseModel):
         description="HuggingFace model ID for face_anon_simple (None = use mock)"
     )
     anon_num_steps: int = Field(
-        default=25,
+        default=50,
         ge=1,
         le=200,
-        description="Number of diffusion inference steps (lower = faster)"
+        description="Number of diffusion inference steps (higher = sharper)"
     )
     anon_guidance_scale: float = Field(
-        default=4.0,
+        default=7.0,
         ge=0.0,
-        description="Classifier-free guidance scale"
+        description="Classifier-free guidance scale (higher = preserve structure better)"
     )
     anon_degree: float = Field(
-        default=1.25,
+        default=1.1,
         ge=0.0,
-        description="Anonymization degree (higher = more different from original)"
+        description="Anonymization degree (1.1 = best quality, higher = more different)"
     )
 
     @field_validator("device")

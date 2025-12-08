@@ -91,9 +91,9 @@ class FaceAnonModel:
         device: str = "cuda",
         global_seed: int = 42,
         inference_fn: AnonInferenceFn | None = None,
-        num_inference_steps: int = 25,
-        guidance_scale: float = 4.0,
-        anonymization_degree: float = 1.25,
+        num_inference_steps: int = 50,
+        guidance_scale: float = 7.0,
+        anonymization_degree: float = 1.1,
     ):
         """Initialize the face anonymization model.
 
