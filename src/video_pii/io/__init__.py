@@ -1,2 +1,0 @@
-"""Video I/O utilities."""
-

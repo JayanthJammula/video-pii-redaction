@@ -1,2 +1,0 @@
-"""Face tracking modules."""
-
