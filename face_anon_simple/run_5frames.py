@@ -189,7 +189,8 @@ def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED, reference_image=None):
 # ============================================================================
 
 def process_video(input_path, output_path, fa, pipeline, num_frames=None,
-                  base_seed=DEFAULT_SEED, save_frames=False, reference_image=None):
+                  base_seed=DEFAULT_SEED, save_frames=False, reference_image=None,
+                  auto_reference=True):
     """Process video and anonymize ALL faces with tracking.
 
     Uses IoU-based tracking to maintain consistent identity for each person
@@ -205,6 +206,7 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
         base_seed: Base seed for identity consistency (each face gets base_seed + track_id * 1000)
         save_frames: Whether to save individual frames as PNG
         reference_image: Optional PIL image used as the source identity
+        auto_reference: Whether to auto-generate a reference image per tracked face
     """
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -225,6 +227,7 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
 
     # Initialize face tracker
     tracker = FaceTracker(iou_threshold=0.3, max_lost_frames=30)
+    track_reference_images = {}
 
     for frame_idx in range(num_frames):
         print(f'Processing frame {frame_idx + 1}/{num_frames}...')
@@ -274,12 +277,23 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
             print(f'  Face {face_idx}: track_id={track_id}, seed={face_seed}')
 
             # Anonymize
+            # Determine which reference should guide the anonymization
+            cached_reference = None
+            if auto_reference:
+                cached_reference = track_reference_images.get(track_id)
+            effective_reference = (
+                cached_reference if cached_reference is not None else reference_image
+            )
+
             anon_face = anonymize_face(
                 face_pil,
                 pipeline,
                 seed=face_seed,
-                reference_image=reference_image,
+                reference_image=effective_reference,
             )
+
+            if auto_reference and cached_reference is None:
+                track_reference_images[track_id] = anon_face
 
             # Paste back
             result_pil = paste_face(anon_face, result_pil, mat)
@@ -318,6 +332,8 @@ def main():
                         help='Device to use (cpu/cuda/mps)')
     parser.add_argument('--reference_image', '-r', default=None,
                         help='Optional path to an image used as the source identity (e.g., 1.png)')
+    parser.add_argument('--no_auto_reference', action='store_true',
+                        help='Disable automatically generating synthetic references per tracked face')
     args = parser.parse_args()
 
     print('=== Face Anonymization Pipeline (with Tracking) ===')
@@ -340,6 +356,7 @@ def main():
         base_seed=args.seed,
         save_frames=args.save_frames,
         reference_image=reference_image,
+        auto_reference=not args.no_auto_reference,
     )
 
 
