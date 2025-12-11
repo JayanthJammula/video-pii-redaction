@@ -145,7 +145,15 @@ def paste_face(fg_pil, bg_pil, mat):
     return Image.fromarray(result)
 
 
-def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED):
+def load_reference_image(path):
+    """Load and resize custom reference image to the expected face size."""
+    image = Image.open(path).convert('RGB')
+    if image.size != (FACE_SIZE, FACE_SIZE):
+        image = image.resize((FACE_SIZE, FACE_SIZE), Image.LANCZOS)
+    return image
+
+
+def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED, reference_image=None):
     """Anonymize a single face with consistent identity.
 
     Uses fixed seed to ensure the same person gets the same
@@ -161,8 +169,10 @@ def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED):
     """
     generator = torch.manual_seed(seed)
 
+    source_image = reference_image if reference_image is not None else face_pil
+
     result = pipeline(
-        source_image=face_pil,
+        source_image=source_image,
         conditioning_image=face_pil,
         guidance_scale=GUIDANCE_SCALE,
         num_inference_steps=NUM_INFERENCE_STEPS,
@@ -179,7 +189,7 @@ def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED):
 # ============================================================================
 
 def process_video(input_path, output_path, fa, pipeline, num_frames=None,
-                  base_seed=DEFAULT_SEED, save_frames=False):
+                  base_seed=DEFAULT_SEED, save_frames=False, reference_image=None):
     """Process video and anonymize ALL faces with tracking.
 
     Uses IoU-based tracking to maintain consistent identity for each person
@@ -194,6 +204,7 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
         num_frames: Number of frames to process (None = all)
         base_seed: Base seed for identity consistency (each face gets base_seed + track_id * 1000)
         save_frames: Whether to save individual frames as PNG
+        reference_image: Optional PIL image used as the source identity
     """
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -263,7 +274,12 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
             print(f'  Face {face_idx}: track_id={track_id}, seed={face_seed}')
 
             # Anonymize
-            anon_face = anonymize_face(face_pil, pipeline, seed=face_seed)
+            anon_face = anonymize_face(
+                face_pil,
+                pipeline,
+                seed=face_seed,
+                reference_image=reference_image,
+            )
 
             # Paste back
             result_pil = paste_face(anon_face, result_pil, mat)
@@ -300,6 +316,8 @@ def main():
                         help='Save individual frames as PNG')
     parser.add_argument('--device', '-d', default='cpu',
                         help='Device to use (cpu/cuda/mps)')
+    parser.add_argument('--reference_image', '-r', default=None,
+                        help='Optional path to an image used as the source identity (e.g., 1.png)')
     args = parser.parse_args()
 
     print('=== Face Anonymization Pipeline (with Tracking) ===')
@@ -307,6 +325,10 @@ def main():
 
     # Load models
     fa, pipeline = load_models(device=args.device)
+    reference_image = None
+    if args.reference_image:
+        print(f'Loading reference image from {args.reference_image}...')
+        reference_image = load_reference_image(args.reference_image)
 
     # Process video
     process_video(
@@ -317,9 +339,9 @@ def main():
         num_frames=args.num_frames,
         base_seed=args.seed,
         save_frames=args.save_frames,
+        reference_image=reference_image,
     )
 
 
 if __name__ == '__main__':
     main()
-
