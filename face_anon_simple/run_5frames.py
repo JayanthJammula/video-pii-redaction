@@ -39,7 +39,7 @@ SD_MODEL_ID = "Charles-Elena/stable-diffusion-2-1"
 
 # Anonymization parameters
 GUIDANCE_SCALE = 9.0        # CFG scale (higher = more guidance)
-NUM_INFERENCE_STEPS = 50    # Diffusion steps (more = better quality, slower)
+NUM_INFERENCE_STEPS = 75    # Diffusion steps (more = better quality, slower)
 ANONYMIZATION_DEGREE = 1.5  # How different from original (1.0 = same, higher = more different)
 FACE_SIZE = 512             # Face crop size for model input
 
