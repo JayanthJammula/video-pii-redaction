@@ -95,7 +95,7 @@ FaceType_to_padding_remove_align = {
     FaceType.MID_FULL: (0.0675, False),
     FaceType.FULL: (0.2109375, False),
     FaceType.FULL_NO_ALIGN: (0.2109375, True),
-    FaceType.WHOLE_FACE: (0.55, False),
+    FaceType.WHOLE_FACE: (0.65, False),
     FaceType.WHOLE_FACE_NO_ALIGN: (0.40, True),
     FaceType.HEAD: (0.70, False),
     FaceType.HEAD_NO_ALIGN: (0.70, True),
@@ -231,11 +231,11 @@ def get_transform_mat(image_landmarks, output_size, face_type, scale=1.0):
     mod = (1.0 / scale) * (npla.norm(g_p[0] - g_p[2]) * (padding * np.sqrt(2.0) + 0.5))
 
     if face_type == FaceType.WHOLE_FACE:
-        # shift center further upward to include the hairline region
+        # shift center upward more aggressively to capture hairline/crown
         vec = (g_p[0] - g_p[3]).astype(np.float32)
         vec_len = npla.norm(vec)
         vec /= vec_len
-        g_c += vec * vec_len * 0.12
+        g_c += vec * vec_len * 0.18
 
     elif face_type == FaceType.HEAD:
         # assuming image_landmarks are 3D_Landmarks extracted for HEAD,
