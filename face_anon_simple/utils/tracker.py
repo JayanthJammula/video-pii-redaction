@@ -37,18 +37,27 @@ def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:
     return inter_area / union_area
 
 
-def landmarks_to_bbox(landmarks: np.ndarray) -> np.ndarray:
+def landmarks_to_bbox(landmarks: np.ndarray, padding_ratio: float = 0.3) -> np.ndarray:
     """Convert 68-point landmarks to bounding box.
     
     Args:
         landmarks: (68, 2) array of facial landmarks
-    
+        padding_ratio: Extra padding (as a fraction of width/height) to apply
+
     Returns:
         [x1, y1, x2, y2] bounding box
     """
     x_coords = landmarks[:, 0]
     y_coords = landmarks[:, 1]
-    return np.array([x_coords.min(), y_coords.min(), x_coords.max(), y_coords.max()])
+    x1, y1, x2, y2 = x_coords.min(), y_coords.min(), x_coords.max(), y_coords.max()
+    width = x2 - x1
+    height = y2 - y1
+
+    # Expand bbox on all sides by the requested padding percentage.
+    x_pad = width * padding_ratio
+    y_pad = height * padding_ratio
+
+    return np.array([x1 - x_pad, y1 - y_pad, x2 + x_pad, y2 + y_pad])
 
 
 class FaceTracker:
@@ -153,4 +162,3 @@ class FaceTracker:
             Unique seed for this track (base_seed + track_id * 1000)
         """
         return base_seed + track_id * 1000
-
