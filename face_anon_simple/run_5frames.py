@@ -27,6 +27,10 @@ from src.diffusers.pipelines.referencenet.pipeline_referencenet import (
 )
 from utils.extractor import get_transform_mat, FaceType
 from utils.tracker import FaceTracker
+try:
+    from utils.segmenter import HeadSegmenter
+except Exception:
+    HeadSegmenter = None
 
 
 # ============================================================================
@@ -107,7 +111,7 @@ def load_models(device='cpu'):
 # Face Processing Functions
 # ============================================================================
 
-def paste_face(fg_pil, bg_pil, mat):
+def paste_face(fg_pil, bg_pil, mat, blend_mask=None):
     """Paste anonymized face back onto original frame.
 
     Uses inverse affine transform with Lanczos interpolation and
@@ -146,6 +150,11 @@ def paste_face(fg_pil, bg_pil, mat):
     warped_mask = cv2.warpAffine(mask, mat, (w, h),
         flags=cv2.WARP_INVERSE_MAP | cv2.INTER_NEAREST,
         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+    if blend_mask is not None:
+        warped_mask = cv2.bitwise_and(
+            warped_mask, blend_mask.astype(np.uint8)
+        )
 
     # Feather edges for seamless blending
     warped_mask = cv2.GaussianBlur(warped_mask, (blur_kernel, blur_kernel), 0)
@@ -202,7 +211,8 @@ def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED, reference_image=None):
 
 def process_video(input_path, output_path, fa, pipeline, num_frames=None,
                   base_seed=DEFAULT_SEED, save_frames=False, reference_image=None,
-                  debug_viz_dir=None):
+                  debug_viz_dir=None, segment_head=False,
+                  segmentation_threshold=0.3, segmentation_kernel=25):
     """Process video and anonymize ALL faces with tracking.
 
     Uses IoU-based tracking to maintain consistent identity for each person
@@ -245,6 +255,17 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
         overlay_dir = debug_viz_dir / 'overlays'
         crop_dir.mkdir(parents=True, exist_ok=True)
         overlay_dir.mkdir(parents=True, exist_ok=True)
+    segmenter = None
+    if segment_head:
+        if HeadSegmenter is None:
+            raise RuntimeError(
+                "Head segmentation requested but mediapipe is missing. "
+                "Install mediapipe to enable this feature."
+            )
+        segmenter = HeadSegmenter(
+            threshold=segmentation_threshold,
+            dilate_kernel=segmentation_kernel,
+        )
 
     for frame_idx in range(num_frames):
         print(f'Processing frame {frame_idx + 1}/{num_frames}...')
@@ -258,6 +279,7 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_array = np.array(frame_rgb)
         pil_frame = Image.fromarray(frame_rgb)
+        seg_mask = segmenter.get_mask(frame_bgr) if segmenter else None
 
         # Detect face landmarks
         landmarks_list = fa.get_landmarks(frame_array)
@@ -306,18 +328,26 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
                 reference_image=reference_image,
             )
 
+            inv_mat = cv2.invertAffineTransform(mat)
+            crop_corners = np.array(
+                [[0, 0], [FACE_SIZE, 0], [FACE_SIZE, FACE_SIZE], [0, FACE_SIZE]],
+                dtype=np.float32,
+            )
+            crop_corners = cv2.transform(
+                crop_corners[None, :, :], inv_mat
+            )[0].astype(np.int32)
+
             # Paste back
-            result_pil = paste_face(anon_face, result_pil, mat)
+            blend_mask = None
+            if seg_mask is not None:
+                blend_mask = np.zeros((height, width), dtype=np.uint8)
+                cv2.fillPoly(blend_mask, [crop_corners], 255)
+                blend_mask = cv2.bitwise_and(blend_mask, seg_mask)
+                if cv2.countNonZero(blend_mask) == 0:
+                    blend_mask = None
+            result_pil = paste_face(anon_face, result_pil, mat, blend_mask=blend_mask)
 
             if overlay_dir is not None:
-                inv_mat = cv2.invertAffineTransform(mat)
-                crop_corners = np.array(
-                    [[0, 0], [FACE_SIZE, 0], [FACE_SIZE, FACE_SIZE], [0, FACE_SIZE]],
-                    dtype=np.float32,
-                )
-                crop_corners = cv2.transform(
-                    crop_corners[None, :, :], inv_mat
-                )[0].astype(np.int32)
                 overlay_img = frame_bgr.copy()
                 cv2.polylines(overlay_img, [crop_corners], True, (0, 255, 0), 2)
                 overlay_path = overlay_dir / f'frame_{frame_idx:04d}.png'
@@ -332,6 +362,8 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
 
     cap.release()
     out.release()
+    if segmenter is not None:
+        segmenter.close()
     print()
     print(f'Done! Output saved to: {output_path}')
     print(f'Total unique faces tracked: {tracker.next_id}')
@@ -359,6 +391,12 @@ def main():
                         help='Optional path to an image used as the source identity (e.g., 1.png)')
     parser.add_argument('--debug_viz_dir', default=None,
                         help='Directory to save crop overlays and extracted face crops for debugging')
+    parser.add_argument('--segment_head', action='store_true',
+                        help='Enable MediaPipe-based head segmentation for blending')
+    parser.add_argument('--segmentation_threshold', type=float, default=0.3,
+                        help='Probability threshold (0-1) for segmentation mask (default: 0.3)')
+    parser.add_argument('--segmentation_kernel', type=int, default=25,
+                        help='Kernel size for dilating segmentation mask (default: 25)')
     args = parser.parse_args()
 
     print('=== Face Anonymization Pipeline (with Tracking) ===')
@@ -382,6 +420,9 @@ def main():
         save_frames=args.save_frames,
         reference_image=reference_image,
         debug_viz_dir=args.debug_viz_dir,
+        segment_head=args.segment_head,
+        segmentation_threshold=args.segmentation_threshold,
+        segmentation_kernel=args.segmentation_kernel,
     )
 
 
