@@ -97,8 +97,8 @@ FaceType_to_padding_remove_align = {
     FaceType.FULL_NO_ALIGN: (0.2109375, True),
     FaceType.WHOLE_FACE: (0.65, False),
     FaceType.WHOLE_FACE_NO_ALIGN: (0.40, True),
-    FaceType.HEAD: (0.70, False),
-    FaceType.HEAD_NO_ALIGN: (0.70, True),
+    FaceType.HEAD: (0.85, False),
+    FaceType.HEAD_NO_ALIGN: (0.85, True),
 }
 
 
@@ -250,11 +250,11 @@ def get_transform_mat(image_landmarks, output_size, face_type, scale=1.0):
 
         g_c -= hvec * (yaw * hvec_len / 2.0)
 
-        # adjust vertical offset for HEAD, 50% below
+        # adjust vertical offset for HEAD, bias further upward to include hair/crown
         vvec = (g_p[0] - g_p[3]).astype(np.float32)
         vvec_len = npla.norm(vvec)
         vvec /= vvec_len
-        g_c += vvec * vvec_len * 0.50
+        g_c += vvec * vvec_len * 0.70
 
     # calc 3 points in global space to estimate 2d affine transform
     if not remove_align:
