@@ -97,8 +97,8 @@ FaceType_to_padding_remove_align = {
     FaceType.FULL_NO_ALIGN: (0.2109375, True),
     FaceType.WHOLE_FACE: (0.65, False),
     FaceType.WHOLE_FACE_NO_ALIGN: (0.40, True),
-    FaceType.HEAD: (0.85, False),
-    FaceType.HEAD_NO_ALIGN: (0.85, True),
+    FaceType.HEAD: (0.80, False),
+    FaceType.HEAD_NO_ALIGN: (0.80, True),
 }
 
 

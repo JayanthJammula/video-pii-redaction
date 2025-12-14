@@ -40,7 +40,7 @@ SD_MODEL_ID = "Charles-Elena/stable-diffusion-2-1"
 # Anonymization parameters
 GUIDANCE_SCALE = 7.0        # CFG scale (higher = more guidance)
 NUM_INFERENCE_STEPS = 75    # Diffusion steps (more = better quality, slower)
-ANONYMIZATION_DEGREE = 0  # How different from original (1.0 = same, higher = more different)
+ANONYMIZATION_DEGREE = 1.3  # How different from original (1.0 = same, higher = more different)
 FACE_SIZE = 512             # Face crop size for model input
 
 # Identity seeds - same seed = same anonymized identity across all frames
@@ -130,13 +130,24 @@ def paste_face(fg_pil, bg_pil, mat):
         borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
 
     # Create and warp mask
-    mask = np.ones((fg.shape[0], fg.shape[1]), dtype=np.uint8) * 255
+    mask = np.zeros((fg.shape[0], fg.shape[1]), dtype=np.uint8)
+    pad = max(1, int(min(fg.shape[:2]) * 0.02))
+    cv2.rectangle(
+        mask,
+        (pad, pad),
+        (mask.shape[1] - pad, mask.shape[0] - pad),
+        255,
+        thickness=-1,
+    )
+    blur_kernel = max(31, (FACE_SIZE // 8) | 1)  # big blur for soft edges, ensure odd
+    if blur_kernel % 2 == 0:
+        blur_kernel += 1
     warped_mask = cv2.warpAffine(mask, mat, (w, h),
         flags=cv2.WARP_INVERSE_MAP | cv2.INTER_NEAREST,
         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
     # Feather edges for seamless blending
-    warped_mask = cv2.GaussianBlur(warped_mask, (21, 21), 0)
+    warped_mask = cv2.GaussianBlur(warped_mask, (blur_kernel, blur_kernel), 0)
     mask_f = warped_mask.astype(np.float32) / 255.0
     mask_3 = np.stack([mask_f]*3, axis=-1)
 
