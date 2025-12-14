@@ -262,7 +262,8 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
         face_idx = 0
         if True:  # Single face block (keeps indentation consistent for easy revert)
             # Extract face using landmarks
-            mat = get_transform_mat(landmarks, FACE_SIZE, FaceType.WHOLE_FACE)
+            # Use HEAD face type to capture hair/ears for anonymization
+            mat = get_transform_mat(landmarks, FACE_SIZE, FaceType.HEAD)
             face_array = cv2.warpAffine(
                 frame_array, mat, (FACE_SIZE, FACE_SIZE),
                 cv2.INTER_LANCZOS4, borderValue=(255, 255, 255)
