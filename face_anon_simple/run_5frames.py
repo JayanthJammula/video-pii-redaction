@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
@@ -200,7 +201,8 @@ def anonymize_face(face_pil, pipeline, seed=DEFAULT_SEED, reference_image=None):
 # ============================================================================
 
 def process_video(input_path, output_path, fa, pipeline, num_frames=None,
-                  base_seed=DEFAULT_SEED, save_frames=False, reference_image=None):
+                  base_seed=DEFAULT_SEED, save_frames=False, reference_image=None,
+                  debug_viz_dir=None):
     """Process video and anonymize ALL faces with tracking.
 
     Uses IoU-based tracking to maintain consistent identity for each person
@@ -236,6 +238,13 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
 
     # Initialize face tracker
     tracker = FaceTracker(iou_threshold=0.3, max_lost_frames=30)
+    overlay_dir = crop_dir = None
+    if debug_viz_dir is not None:
+        debug_viz_dir = Path(debug_viz_dir)
+        crop_dir = debug_viz_dir / 'crops'
+        overlay_dir = debug_viz_dir / 'overlays'
+        crop_dir.mkdir(parents=True, exist_ok=True)
+        overlay_dir.mkdir(parents=True, exist_ok=True)
 
     for frame_idx in range(num_frames):
         print(f'Processing frame {frame_idx + 1}/{num_frames}...')
@@ -281,6 +290,10 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
             )
             face_pil = Image.fromarray(face_array)
 
+            if crop_dir is not None:
+                crop_path = crop_dir / f'frame_{frame_idx:04d}_track_{track_id}.png'
+                face_pil.save(crop_path)
+
             # Get unique seed for this tracked person
             face_seed = tracker.get_seed_for_track(track_id, base_seed)
             print(f'  Face {face_idx}: track_id={track_id}, seed={face_seed}')
@@ -295,6 +308,20 @@ def process_video(input_path, output_path, fa, pipeline, num_frames=None,
 
             # Paste back
             result_pil = paste_face(anon_face, result_pil, mat)
+
+            if overlay_dir is not None:
+                inv_mat = cv2.invertAffineTransform(mat)
+                crop_corners = np.array(
+                    [[0, 0], [FACE_SIZE, 0], [FACE_SIZE, FACE_SIZE], [0, FACE_SIZE]],
+                    dtype=np.float32,
+                )
+                crop_corners = cv2.transform(
+                    crop_corners[None, :, :], inv_mat
+                )[0].astype(np.int32)
+                overlay_img = frame_bgr.copy()
+                cv2.polylines(overlay_img, [crop_corners], True, (0, 255, 0), 2)
+                overlay_path = overlay_dir / f'frame_{frame_idx:04d}.png'
+                cv2.imwrite(str(overlay_path), overlay_img)
 
         result_bgr = cv2.cvtColor(np.array(result_pil), cv2.COLOR_RGB2BGR)
         out.write(result_bgr)
@@ -330,6 +357,8 @@ def main():
                         help='Device to use (cpu/cuda/mps)')
     parser.add_argument('--reference_image', '-r', default=None,
                         help='Optional path to an image used as the source identity (e.g., 1.png)')
+    parser.add_argument('--debug_viz_dir', default=None,
+                        help='Directory to save crop overlays and extracted face crops for debugging')
     args = parser.parse_args()
 
     print('=== Face Anonymization Pipeline (with Tracking) ===')
@@ -352,6 +381,7 @@ def main():
         base_seed=args.seed,
         save_frames=args.save_frames,
         reference_image=reference_image,
+        debug_viz_dir=args.debug_viz_dir,
     )
 
 
